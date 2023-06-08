@@ -1,0 +1,12 @@
+version: "2.2"
+
+services:
+  ui:
+    build: ./
+    entrypoint: streamlit run app.py --server.address=0.0.0.0 --server.port=8080
+    env_file:
+      - .env
+    ports:
+      - 8080:8080
+    volumes:
+      - .:/app
