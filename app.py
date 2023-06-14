@@ -1,14 +1,15 @@
+import os
 import streamlit as st
+import pinecone
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import Pinecone
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplates import css, bot_template, user_template
-from langchain.llms import HuggingFaceHub
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -30,11 +31,25 @@ def get_text_chunks(text):
     return chunks
 
 
-def get_vectorstore(text_chunks):
+def get_vectorstore(text_chunks=None):
+    pinecone.init(api_key=os.getenv('VECTOR_DB_API_KEY'),
+                  environment=os.getenv('VECTOR_DB_ENVIRONMENT'))
+
     embeddings = OpenAIEmbeddings()
-    # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
-    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+
+    vectorstore = None
+
+    if text_chunks is not None:
+        vectorstore = Pinecone.from_texts(texts=text_chunks,
+                                          embedding=embeddings,
+                                          index_name=os.getenv('VECTOR_DB_INDEX'))
+    else:
+        vectorstore = Pinecone.from_existing_index(embedding=embeddings,
+                                                   index_name=os.getenv('VECTOR_DB_INDEX'))
+
     return vectorstore
+
+
 
 
 def get_conversation_chain(vectorstore):
@@ -71,12 +86,17 @@ def main():
     st.write(css, unsafe_allow_html=True)
 
     if "conversation" not in st.session_state:
-        st.session_state.conversation = None
+        # create vector store
+        vectorstore = get_vectorstore()
+
+        # create conversation chain
+        st.session_state.conversation = get_conversation_chain(vectorstore)
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = None
 
     st.header("Chat with multiple PDFs :books:")
     user_question = st.text_input("Ask a question about your documents:")
+
     if user_question:
         handle_userinput(user_question)
 
